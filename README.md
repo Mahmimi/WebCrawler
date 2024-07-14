@@ -115,7 +115,7 @@ insert_contents_to_mongoDB(
 )
 ```
 
-### Example Usage
+## Example Usage
 #### Single Page Crawler
 ```python
 crawler = SinglePage_WebCrawler('https://example.com', html_check=True)
