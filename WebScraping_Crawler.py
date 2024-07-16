@@ -22,7 +22,7 @@ class SinglePage_WebCrawler():
 
     """
 
-    def __init__(self, url:str, html_check:bool=True, category:str='Not defined', owner_source:str='Not defined'):
+    def __init__(self, url:str, html_check:bool=True, category:str='Not defined', owner_source:str='Not defined', driver:webdriver.Chrome=None):
         """
         Initialize the SinglePage_WebCrawler with the specified URL and HTML check flag.
         
@@ -31,6 +31,7 @@ class SinglePage_WebCrawler():
             html_check (bool, optional): Flag to indicate whether the content is HTML or not. Defaults to True. Please see Note below if error or content is not found.
             category (str, optional): The category of the web page. Defaults to None.
             owner_source (str, optional): The source of the web page. Defaults to None.
+            driver (webdriver.Chrome, optional): The webdriver to use. Defaults to None.
         
         Returns:
             None
@@ -38,35 +39,93 @@ class SinglePage_WebCrawler():
         Note:
             html_check also check static content if html_check is True and dynamic content if html_check is False. 
             If you are unsure about this flag, try scraping with html_check=True first. If content is not found, try html_check=False.
+        
+        Suggession:
+            If you want to scrape more content than provided built-in functions, use SinglePage_WebCrawler.soup with single driver will be efficient.
+            For example:
+
+            >>>    from WebScraping_Crawler import SinglePage_WebCrawler,MultiPage_WebCrawler,insert_contents_to_mongoDB
+            >>>    from tqdm.auto import tqdm
+            >>>    import pandas as pd
+            >>>    from selenium import webdriver
+            
+            >>>    url = 'https://www.kaidee.com/c221-pet-cat/p-{0}'
+            >>>    web_crawler = MultiPage_WebCrawler(url, html_check=False, category="pet", owner_source="Kaidee")
+            >>>    url_list = web_crawler.get_pages_url_list(a_class='sc-1n24v7v-0 kERWEr box-border overflow-hidden', start_page=1, end_page=5, step_page=1)
+
+            >>>    # Initialize a WebDriver instance
+            >>>    options = webdriver.ChromeOptions()
+            >>>    options.add_argument('--headless')
+            >>>    options.add_argument('--disable-gpu')
+            >>>    options.add_argument("--no-sandbox")
+            >>>    options.add_argument("--disable-dev-shm-usage")
+            >>>    options.add_argument("--window-size=1920,1080")
+            >>>    options.add_argument("start-maximized")
+            >>>    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            >>>    driver = webdriver.Chrome(options=options)
+            >>>    driver.implicitly_wait(10)
+
+            >>>    # Initialize an empty list to collect data
+            >>>    data = []
+
+            >>>    for page in tqdm(url_list, desc='Page number'):
+            >>>        try:
+            >>>            web_crawler = SinglePage_WebCrawler(page, html_check=False, category="pet", owner_source="Kaidee", driver=driver)
+            >>>            title = web_crawler.get_title()
+            >>>            price = float(web_crawler.soup.find('span', class_="sc-3tpgds-0 iBWLya sc-1q2fzk2-2 ehoPiE").text.replace(' ', '').replace('฿', '').replace(',',''))
+            >>>            seller = web_crawler.soup.find('a', class_="sc-1f9a7ae-0 grxgwt font-bold text-sd125").text
+            >>>            tag = web_crawler.soup.find('div', class_="my-lg mx-0 relative flex flex-wrap items-center gap-sm overflow-hidden").text
+            >>>            species = web_crawler.soup.find('div', class_="grid grid-cols-1 md:grid-cols-2 md:gap-x-5xl").text
+            >>>            description = web_crawler.soup.find('div', class_="sc-1ir8548-0 kPXKAP").text.replace('อ่านเพิ่มเติม', '')
+            >>>            province = tag.split('/')[-2]
+            >>>            district = tag.split('/')[-1]
+            >>>            # Append data to list
+            >>>            data.append({
+            >>>                'Title': title,
+            >>>                'Price': price,
+            >>>                'Seller': seller,
+            >>>                'Tag': tag,
+            >>>                'Species': species,
+            >>>                'Description': description,
+            >>>                'Province': province,
+            >>>                'District': district
+            >>>            })
+            >>>        except:
+            >>>            continue
+
+            >>>    # Create DataFrame from collected data
+            >>>    df = pd.DataFrame(data)
         """
 
         self.url = url
         self.html_check = html_check
         self.category = category
         self.owner_source = owner_source
+        self.driver = driver
 
-        
         if html_check:
             source = requests.get(self.url)
             self.soup = BeautifulSoup(source.content,'html.parser', from_encoding='utf-8')
         
         else:
-            options = webdriver.ChromeOptions()
-            options.add_argument('--headless')
-            options.add_argument('--disable-gpu')
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--window-size=1920,1080")  # Set window size
-            options.add_argument("start-maximized")  # Maximize window
-            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Set User-Agent
-            driver = webdriver.Chrome(options=options)
-            driver.get(self.url)
-            driver.implicitly_wait(3)
-            html = driver.page_source
 
+            if not self.driver:
+                options = webdriver.ChromeOptions()
+                options.add_argument('--headless')
+                options.add_argument('--disable-gpu')
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--window-size=1920,1080")
+                options.add_argument("start-maximized")
+                options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+                self.driver = webdriver.Chrome(options=options)
+                self.driver.implicitly_wait(10)
+            else:
+                self.driver = driver
+
+            self.driver.get(self.url)
+            html = self.driver.page_source
             self.soup = BeautifulSoup(html, from_encoding='utf-8')
-
-            driver.quit()
 
     def get_text(self):
         """
@@ -201,21 +260,10 @@ class MultiPage_WebCrawler(SinglePage_WebCrawler):
         else:
             local_url = self.url
 
-        if self.html_check == False:
-            options = webdriver.ChromeOptions()
-            options.add_argument('--headless')
-            options.add_argument('--disable-gpu')
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--window-size=1920,1080")  # Set window size
-            options.add_argument("start-maximized")  # Maximize window
-            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Set User-Agent
-            driver = webdriver.Chrome(options=options)
-            driver.get(local_url)
-            driver.implicitly_wait(3)
-            html = driver.page_source
+        if not self.html_check:
+            self.driver.get(local_url)
+            html = self.driver.page_source
             soup = BeautifulSoup(html, from_encoding='utf-8')
-            driver.quit()
         else:
             print('Invalid html_check, html_check must be html_check=False.')
 
