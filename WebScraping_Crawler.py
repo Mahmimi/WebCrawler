@@ -1,3 +1,5 @@
+"""CITE: https://github.com/Mahmimi/WebCrawler"""
+
 from selenium import webdriver
 from bs4 import BeautifulSoup
 import requests
@@ -22,7 +24,7 @@ class SinglePage_WebCrawler():
 
     """
 
-    def __init__(self, url:str, html_check:bool=True, category:str='Not defined', owner_source:str='Not defined', driver:webdriver.Chrome=None):
+    def __init__(self, url:str, html_check:bool=True, category:str='Not defined', owner_source:str='Not defined', as_connector:bool=False, driver:webdriver.Chrome=None, show_progressbar:bool=True):
         """
         Initialize the SinglePage_WebCrawler with the specified URL and HTML check flag.
         
@@ -31,7 +33,9 @@ class SinglePage_WebCrawler():
             html_check (bool, optional): Flag to indicate whether the content is HTML or not. Defaults to True. Please see Note below if error or content is not found.
             category (str, optional): The category of the web page. Defaults to None.
             owner_source (str, optional): The source of the web page. Defaults to None.
+            as_connector (bool, optional): if True, the driver will not refresh the page or reload the page. Defaults to False.
             driver (webdriver.Chrome, optional): The webdriver to use. Defaults to None.
+            show_progressbar (bool, optional): If True, show a progress bar. Defaults to True.
         
         Returns:
             None
@@ -102,6 +106,8 @@ class SinglePage_WebCrawler():
         self.category = category
         self.owner_source = owner_source
         self.driver = driver
+        self.as_connector = as_connector
+        self.show_progressbar = show_progressbar
 
         if html_check:
             source = requests.get(self.url)
@@ -123,7 +129,9 @@ class SinglePage_WebCrawler():
             else:
                 self.driver = driver
 
-            self.driver.get(self.url)
+            if not as_connector:
+                self.driver.get(self.url)
+
             html = self.driver.page_source
             self.soup = BeautifulSoup(html, from_encoding='utf-8')
 
@@ -261,7 +269,8 @@ class MultiPage_WebCrawler(SinglePage_WebCrawler):
             local_url = self.url
 
         if not self.html_check:
-            self.driver.get(local_url)
+            if not self.as_connector:
+                self.driver.get(local_url)
             html = self.driver.page_source
             soup = BeautifulSoup(html, from_encoding='utf-8')
         else:
@@ -374,25 +383,46 @@ class MultiPage_WebCrawler(SinglePage_WebCrawler):
         """
         
         pages_list = []
-        if custom_pageindex_list:
-            for i in tqdm(custom_pageindex_list,desc='Page number'):
-                url = self.url.format(i)
-                soup = self._local_web_scraping(url=url)
-        
-                for read_more in soup.find_all('a', class_=a_class, href=True):
-                    if not read_more['href'].startswith('http'):
-                        read_more['href'] = urljoin(url, read_more['href'])
-                    pages_list.append(read_more['href'])
+        if self.show_progressbar:
+            if custom_pageindex_list:
+                for i in tqdm(custom_pageindex_list,desc='Page number'):
+                    url = self.url.format(i)
+                    soup = self._local_web_scraping(url=url)
+            
+                    for read_more in soup.find_all('a', class_=a_class, href=True):
+                        if not read_more['href'].startswith('http'):
+                            read_more['href'] = urljoin(url, read_more['href'])
+                        pages_list.append(read_more['href'])
 
+            else:
+                for i in tqdm(range(start_page, end_page+1, step_page),desc='Page number'):
+                    url = self.url.format(i)
+                    soup = self._local_web_scraping(url=url)
+            
+                    for read_more in soup.find_all('a', class_=a_class, href=True):
+                        if not read_more['href'].startswith('http'):
+                            read_more['href'] = urljoin(url, read_more['href'])
+                        pages_list.append(read_more['href'])
         else:
-            for i in tqdm(range(start_page, end_page+1, step_page),desc='Page number'):
-                url = self.url.format(i)
-                soup = self._local_web_scraping(url=url)
-        
-                for read_more in soup.find_all('a', class_=a_class, href=True):
-                    if not read_more['href'].startswith('http'):
-                        read_more['href'] = urljoin(url, read_more['href'])
-                    pages_list.append(read_more['href'])
+            if custom_pageindex_list:
+                for i in custom_pageindex_list:
+                    url = self.url.format(i)
+                    soup = self._local_web_scraping(url=url)
+            
+                    for read_more in soup.find_all('a', class_=a_class, href=True):
+                        if not read_more['href'].startswith('http'):
+                            read_more['href'] = urljoin(url, read_more['href'])
+                        pages_list.append(read_more['href'])
+
+            else:
+                for i in range(start_page, end_page+1, step_page):
+                    url = self.url.format(i)
+                    soup = self._local_web_scraping(url=url)
+            
+                    for read_more in soup.find_all('a', class_=a_class, href=True):
+                        if not read_more['href'].startswith('http'):
+                            read_more['href'] = urljoin(url, read_more['href'])
+                        pages_list.append(read_more['href'])
 
         return list(set(pages_list))
 
@@ -474,44 +504,83 @@ class MultiPage_WebCrawler(SinglePage_WebCrawler):
         except:
             print(f"get_pages_url_list() can't get articles url. Please check web tag for {self.url}: (start_page|end_page|step_page|a_class_in_PageList|custom_pageindex_list)")
 
-        for articles in tqdm(articles_url,desc='Article number'):
-            try:
-                soup_sep = self._local_web_scraping(url=articles)
-                title_return, content_return = self._local_get_content_sep(soup=soup_sep, title_tag=tag_dict['title_tag_in_ArticlePage'], 
-                                                                    title_class=tag_dict['title_class_in_ArticlePage'],
-                                                                    content_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
-                                                                    content_area_class=tag_dict['content_area_class_in_ArticlePage'])
-                if title_return == '':
-                    #print("Can't find title. Please check web tag from :",articles)
-                    continue
-                
-                if content_return == '':
-                    #print("Can't find contents. Please check web tag from :",articles)
-                    continue
-                        
-                banner_return = self._local_get_banner_image_sep(soup=soup_sep, banner_tag=tag_dict['banner_tag_in_ArticlePage'], 
-                                                                banner_class=tag_dict['banner_class_in_ArticlePage'])
-                
-                if banner_return == None:
-                    #print("Can't find banner. Please check web tag from :",articles)
-                    pass
+        if self.show_progressbar:
+            for articles in tqdm(articles_url,desc='Article number'):
+                try:
+                    soup_sep = self._local_web_scraping(url=articles)
+                    title_return, content_return = self._local_get_content_sep(soup=soup_sep, title_tag=tag_dict['title_tag_in_ArticlePage'], 
+                                                                        title_class=tag_dict['title_class_in_ArticlePage'],
+                                                                        content_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
+                                                                        content_area_class=tag_dict['content_area_class_in_ArticlePage'])
+                    if title_return == '':
+                        #print("Can't find title. Please check web tag from :",articles)
+                        continue
+                    
+                    if content_return == '':
+                        #print("Can't find contents. Please check web tag from :",articles)
+                        continue
+                            
+                    banner_return = self._local_get_banner_image_sep(soup=soup_sep, banner_tag=tag_dict['banner_tag_in_ArticlePage'], 
+                                                                    banner_class=tag_dict['banner_class_in_ArticlePage'])
+                    
+                    if banner_return == None:
+                        #print("Can't find banner. Please check web tag from :",articles)
+                        pass
 
-                image_return = self._local_get_images_sep(soup=soup_sep, image_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
-                                                                image_area_class=tag_dict['content_area_class_in_ArticlePage'])
-                if image_return == []:
-                    #print("Can't find images. Please check web tag from :",articles)
-                    pass
-                        
-                if banner_return in image_return:
-                    image_return.remove(banner_return)
-                
-                contents.append({'url':articles,'category':self.category, 'title':title_return,'owner source':self.owner_source,
-                                 'content':' '.join(content_return), 'banner':banner_return, 'image':image_return})
-                
-        
-            except:
-                diff.append(articles)
-    
+                    image_return = self._local_get_images_sep(soup=soup_sep, image_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
+                                                                    image_area_class=tag_dict['content_area_class_in_ArticlePage'])
+                    if image_return == []:
+                        #print("Can't find images. Please check web tag from :",articles)
+                        pass
+                            
+                    if banner_return in image_return:
+                        image_return.remove(banner_return)
+                    
+                    contents.append({'url':articles,'category':self.category, 'title':title_return,'owner source':self.owner_source,
+                                    'content':' '.join(content_return), 'banner':banner_return, 'image':image_return})
+                    
+            
+                except:
+                    diff.append(articles)
+        else:
+            for articles in articles_url:
+                try:
+                    soup_sep = self._local_web_scraping(url=articles)
+                    title_return, content_return = self._local_get_content_sep(soup=soup_sep, title_tag=tag_dict['title_tag_in_ArticlePage'], 
+                                                                        title_class=tag_dict['title_class_in_ArticlePage'],
+                                                                        content_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
+                                                                        content_area_class=tag_dict['content_area_class_in_ArticlePage'])
+                    if title_return == '':
+                        #print("Can't find title. Please check web tag from :",articles)
+                        continue
+                    
+                    if content_return == '':
+                        #print("Can't find contents. Please check web tag from :",articles)
+                        continue
+                            
+                    banner_return = self._local_get_banner_image_sep(soup=soup_sep, banner_tag=tag_dict['banner_tag_in_ArticlePage'], 
+                                                                    banner_class=tag_dict['banner_class_in_ArticlePage'])
+                    
+                    if banner_return == None:
+                        #print("Can't find banner. Please check web tag from :",articles)
+                        pass
+
+                    image_return = self._local_get_images_sep(soup=soup_sep, image_area_tag=tag_dict['content_area_tag_in_ArticlePage'], 
+                                                                    image_area_class=tag_dict['content_area_class_in_ArticlePage'])
+                    if image_return == []:
+                        #print("Can't find images. Please check web tag from :",articles)
+                        pass
+                            
+                    if banner_return in image_return:
+                        image_return.remove(banner_return)
+                    
+                    contents.append({'url':articles,'category':self.category, 'title':title_return,'owner source':self.owner_source,
+                                    'content':' '.join(content_return), 'banner':banner_return, 'image':image_return})
+                    
+            
+                except:
+                    diff.append(articles)
+
         try:
             print('different url web type from the other are :',diff)
         except:
@@ -520,7 +589,7 @@ class MultiPage_WebCrawler(SinglePage_WebCrawler):
         return contents
 
 #connect to mongodb
-def insert_contents_to_mongoDB(database_address:str,database_name:str,database_colection:str,contents_list:list):
+def insert_contents_to_mongoDB(database_address:str,database_name:str,database_colection:str,contents_list:list,show_progressbar:bool=True):
 
     """
 	Inserts contents into a MongoDB database.
@@ -530,6 +599,7 @@ def insert_contents_to_mongoDB(database_address:str,database_name:str,database_c
 	- database_name: str, the name of the database.
 	- database_colection: str, the name of the collection in the database.
 	- contents_list: list, a list of contents to be inserted.
+    - show_progressbar: bool, whether to show the progress bar.
 
 	Returns:
 	- None
@@ -544,8 +614,12 @@ def insert_contents_to_mongoDB(database_address:str,database_name:str,database_c
 
         database = database_name[database_colection]
 
-        for i in tqdm(contents_list,desc='content number'):
-            database.insert_one(i)
+        if show_progressbar:
+            for i in tqdm(contents_list,desc='content number'):
+                database.insert_one(i)
+        else:
+            for i in contents_list:
+                database.insert_one(i)
         
         print('---Insert Successful---')
 
